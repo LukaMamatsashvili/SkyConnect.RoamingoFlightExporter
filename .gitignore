@@ -1,0 +1,10 @@
+bin/
+obj/
+Output/
+*.user
+*.suo
+*.cache
+appsettings.Local.json
+.vs/
+.idea/
+TestResults/

@@ -1,0 +1,48 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SkyConnect.RoamingoFlightExporter.Tests", "SkyConnect.RoamingoFlightExporter.Tests\SkyConnect.RoamingoFlightExporter.Tests.csproj", "{ABA7B4A6-793E-4451-AF01-C060B50614B0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SkyConnect.RoamingoFlightExporter", "SkyConnect.RoamingoFlightExporter\SkyConnect.RoamingoFlightExporter.csproj", "{1DB658DA-5A73-4FA5-9CCE-0EF7506AF8FD}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|Any CPU = Release|Any CPU
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{ABA7B4A6-793E-4451-AF01-C060B50614B0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{ABA7B4A6-793E-4451-AF01-C060B50614B0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{ABA7B4A6-793E-4451-AF01-C060B50614B0}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{ABA7B4A6-793E-4451-AF01-C060B50614B0}.Debug|x64.Build.0 = Debug|Any CPU
+		{ABA7B4A6-793E-4451-AF01-C060B50614B0}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{ABA7B4A6-793E-4451-AF01-C060B50614B0}.Debug|x86.Build.0 = Debug|Any CPU
+		{ABA7B4A6-793E-4451-AF01-C060B50614B0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{ABA7B4A6-793E-4451-AF01-C060B50614B0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{ABA7B4A6-793E-4451-AF01-C060B50614B0}.Release|x64.ActiveCfg = Release|Any CPU
+		{ABA7B4A6-793E-4451-AF01-C060B50614B0}.Release|x64.Build.0 = Release|Any CPU
+		{ABA7B4A6-793E-4451-AF01-C060B50614B0}.Release|x86.ActiveCfg = Release|Any CPU
+		{ABA7B4A6-793E-4451-AF01-C060B50614B0}.Release|x86.Build.0 = Release|Any CPU
+		{1DB658DA-5A73-4FA5-9CCE-0EF7506AF8FD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1DB658DA-5A73-4FA5-9CCE-0EF7506AF8FD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1DB658DA-5A73-4FA5-9CCE-0EF7506AF8FD}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{1DB658DA-5A73-4FA5-9CCE-0EF7506AF8FD}.Debug|x64.Build.0 = Debug|Any CPU
+		{1DB658DA-5A73-4FA5-9CCE-0EF7506AF8FD}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{1DB658DA-5A73-4FA5-9CCE-0EF7506AF8FD}.Debug|x86.Build.0 = Debug|Any CPU
+		{1DB658DA-5A73-4FA5-9CCE-0EF7506AF8FD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1DB658DA-5A73-4FA5-9CCE-0EF7506AF8FD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1DB658DA-5A73-4FA5-9CCE-0EF7506AF8FD}.Release|x64.ActiveCfg = Release|Any CPU
+		{1DB658DA-5A73-4FA5-9CCE-0EF7506AF8FD}.Release|x64.Build.0 = Release|Any CPU
+		{1DB658DA-5A73-4FA5-9CCE-0EF7506AF8FD}.Release|x86.ActiveCfg = Release|Any CPU
+		{1DB658DA-5A73-4FA5-9CCE-0EF7506AF8FD}.Release|x86.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
