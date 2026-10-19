@@ -28,9 +28,9 @@ public sealed class FlightDisruptionClassifier : IFlightDisruptionClassifier
         var actualDeparture = FlightTimeParser.BuildDateTime(occurrence.FlightDate, occurrence.ActualDeparture, scheduledDeparture);
         var scheduledArrival = FlightTimeParser.BuildDateTime(occurrence.FlightDate, occurrence.ScheduledArrival, scheduledDeparture);
         var landedTime = FlightTimeParser.ParseLandedTime(occurrence.Status);
-        var actualArrival = landedTime is null
-            ? null
-            : FlightTimeParser.BuildDateTime(occurrence.FlightDate, landedTime.Value.ToString("HH:mm"), scheduledArrival);
+        var actualArrival = FlightTimeParser.BuildDateTime(occurrence.FlightDate, occurrence.ActualArrival, scheduledArrival)
+            ?? (landedTime is null ? null
+                : FlightTimeParser.BuildDateTime(occurrence.FlightDate, landedTime.Value.ToString("HH:mm"), scheduledArrival));
 
         var departureDelay = FlightTimeParser.CalculateDelayMinutes(scheduledDeparture, actualDeparture);
         var arrivalDelay = FlightTimeParser.CalculateDelayMinutes(scheduledArrival, actualArrival);
@@ -53,7 +53,7 @@ public sealed class FlightDisruptionClassifier : IFlightDisruptionClassifier
         }
 
         return arrivalDelay >= minimumArrivalDelayMinutes
-            ? "Potentially relevant disruption - 3+ hour arrival delay"
+            ? $"Potentially relevant disruption - arrival delay >= {minimumArrivalDelayMinutes} minutes"
             : "";
     }
 }

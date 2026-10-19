@@ -6,6 +6,15 @@ namespace SkyConnect.RoamingoFlightExporter.Tests;
 public sealed class FlightDisruptionClassifierTests
 {
     [Fact]
+    public void Classify_UsesHistoricalAtaWhenStatusHasNoLandedTime()
+    {
+        var occurrence = new FlightDetailOccurrence(new DateOnly(2026, 7, 18), "W67905", "Wizz Air",
+            "KUT", "LCA", "6:00 AM", null, "7:10 AM", "Arrived", "10:20 AM");
+        var result = new FlightDisruptionClassifier().Classify(occurrence, 180);
+        Assert.Equal(190, result.ArrivalDelayMinutes);
+        Assert.True(result.IsExportable);
+    }
+    [Fact]
     public void Classify_ReturnsPotentialDisruption_WhenArrivalDelayMeetsThreshold()
     {
         var classifier = new FlightDisruptionClassifier();

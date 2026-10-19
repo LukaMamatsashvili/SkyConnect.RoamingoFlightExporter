@@ -19,6 +19,7 @@ public sealed class FlightDisruptionCollector(
     ILogger<FlightDisruptionCollector> logger) : IFlightDisruptionCollector
 {
     private readonly ExporterOptions _options = options.Value;
+    private readonly DateTime _runTime = DateTime.Now;
 
     public async Task<CollectionResult> CollectAsync(CancellationToken cancellationToken)
     {
@@ -46,7 +47,10 @@ public sealed class FlightDisruptionCollector(
                 $"Missing examples: {missingPreview}. FlightDetails and Excel export were skipped to avoid wasting API calls.");
         }
 
-        var historical = historicalDiscovery.Flights;
+        var selection = new FlightSelection(_options);
+        var historical = historicalDiscovery.Flights
+            .Where(row => selection.MatchesAirline(row.FlightNumber)
+                && selection.MatchesRoute(row.OriginAirport, row.DestinationAirport)).ToList();
         if (historical.Count == 0)
         {
             logger.LogWarning("No historical data was collected. Export will contain no disruption rows.");
@@ -65,7 +69,11 @@ public sealed class FlightDisruptionCollector(
         var quotaExceeded = false;
         var apiDetailCalls = 0;
         var remainingDetailCallBudget = Math.Max(0, _options.MaxApiCallsPerRun - EstimateHistoricalRequestCount(period, airports, movementTypes));
-        await parallelRunner.ForEachAsync(
+        if (_options.DateSpecificDetails)
+        {
+            await CollectDatedDetailsAsync(historical, detailsByFlightNumber, cancellationToken);
+        }
+        else await parallelRunner.ForEachAsync(
             uniqueFlightNumbers,
             _options.MaxConcurrency,
             async (flightNumber, token) =>
@@ -135,12 +143,58 @@ public sealed class FlightDisruptionCollector(
             movementTypes,
             historical.Count,
             uniqueFlightNumbers.Count,
-            EstimateHistoricalRequestCount(period, airports, movementTypes) + uniqueFlightNumbers.Count,
+            EstimateHistoricalRequestCount(period, airports, movementTypes)
+                + (_options.DateSpecificDetails ? historical.Select(row => (row.FlightNumber, row.Date)).Distinct().Count() : uniqueFlightNumbers.Count),
             sortedRows.Count(row => row.ArrivalDelayMinutes >= _options.MinimumArrivalDelayMinutes),
             sortedRows.Count(row => row.DisruptionType.Equals("Cancelled", StringComparison.OrdinalIgnoreCase)),
             sortedRows.Count);
 
         return new CollectionResult(sortedRows, summary, diagnostics);
+    }
+
+    private async Task CollectDatedDetailsAsync(
+        IReadOnlyList<HistoricalFlightOccurrence> historical,
+        ConcurrentDictionary<string, IReadOnlyList<FlightDetailOccurrence>> results,
+        CancellationToken cancellationToken)
+    {
+        var occurrences = historical.Select(row => (row.FlightNumber, row.Date)).Distinct()
+            .OrderByDescending(row => row.Date).ThenBy(row => row.FlightNumber).ToList();
+        var collected = new ConcurrentBag<FlightDetailOccurrence>();
+        var stopped = 0;
+        var completed = 0;
+        logger.LogInformation("Fetching dated details for {Count} flight occurrences.", occurrences.Count);
+        await parallelRunner.ForEachAsync(occurrences, _options.MaxConcurrency, async (occurrence, token) =>
+        {
+            if (Volatile.Read(ref stopped) == 1) return;
+            var cacheKey = $"{occurrence.FlightNumber}_{occurrence.Date:yyyy-MM-dd}_v2";
+            try
+            {
+                var details = await checkpointStore.TryLoadFlightDetailsAsync(cacheKey, token);
+                if (details is null)
+                {
+                    if (_options.UseOnlyCachedData) return;
+                    try { details = await client.GetFlightDetailsAsync(occurrence.FlightNumber, token, occurrence.Date); }
+                    catch (FlightLabsNoDataException) { details = []; }
+                    await checkpointStore.SaveFlightDetailsAsync(cacheKey, details, token);
+                }
+                foreach (var detail in details.Where(row => row.FlightDate == occurrence.Date))
+                    collected.Add(detail with { Airline = detail.Airline ?? historical.First(row => row.FlightNumber == occurrence.FlightNumber).Airline });
+                var count = Interlocked.Increment(ref completed);
+                logger.LogInformation("Dated details {Completed}/{Total}: {Flight} {Date}, {Rows} rows.",
+                    count, occurrences.Count, occurrence.FlightNumber, occurrence.Date, details.Count);
+            }
+            catch (FlightLabsQuotaExceededException)
+            {
+                Interlocked.Exchange(ref stopped, 1);
+                logger.LogWarning("Request budget or provider quota reached; exporting collected data with coverage diagnostics.");
+            }
+            catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or TimeoutException)
+            {
+                logger.LogWarning("Dated details unavailable for {Flight} {Date}: {ErrorType}.",
+                    occurrence.FlightNumber, occurrence.Date, ex.GetType().Name);
+            }
+        }, cancellationToken);
+        foreach (var group in collected.GroupBy(row => row.FlightNumber)) results[group.Key] = group.ToList();
     }
 
     private async Task<HistoricalDiscoveryResult> DiscoverHistoricalFlightsAsync(
@@ -266,6 +320,9 @@ public sealed class FlightDisruptionCollector(
 
         foreach (var details in detailsByFlightNumber.Values.SelectMany(x => x))
         {
+            var selection = new FlightSelection(_options);
+            if (!selection.MatchesAirline(details.FlightNumber)
+                || !selection.MatchesRoute(details.OriginAirport, details.DestinationAirport)) continue;
             if (details.FlightDate < period.From || details.FlightDate > period.To)
             {
                 continue;
@@ -325,6 +382,9 @@ public sealed class FlightDisruptionCollector(
         foreach (var details in detailsByFlightNumber.Values.SelectMany(x => x))
         {
             var key = FlightOccurrenceKey.From(details);
+            var selection = new FlightSelection(_options);
+            if (!selection.MatchesAirline(details.FlightNumber)
+                || !selection.MatchesRoute(details.OriginAirport, details.DestinationAirport)) continue;
             var classification = classifier.Classify(details, _options.MinimumArrivalDelayMinutes);
             var inPeriod = details.FlightDate >= period.From && details.FlightDate <= period.To;
             var matchedHistorical = historicalKeys.Contains(key);
@@ -459,14 +519,16 @@ public sealed class FlightDisruptionCollector(
     private DateOnly GetPeriodEndDate()
         => DateOnly.TryParse(_options.AsOfDate, out var asOfDate)
             ? asOfDate
-            : DateOnly.FromDateTime(DateTime.Today);
+            : DateOnly.FromDateTime(_runTime);
 
     private IReadOnlyList<string> GetConfiguredMovementTypes()
-        => _options.MovementTypes
-            .Select(type => type.Trim().ToLowerInvariant())
-            .Where(type => type is "departure" or "arrival")
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        => _options.MovementType.ToLowerInvariant() switch
+        {
+            "both" => ["departure", "arrival"],
+            "departure" => ["departure"],
+            "arrival" => ["arrival"],
+            _ => throw new InvalidOperationException("MovementType must be departure, arrival or both.")
+        };
 
     private void GuardHistoricalRequestBudget(
         DateRange period,
@@ -487,15 +549,29 @@ public sealed class FlightDisruptionCollector(
         IReadOnlyCollection<string> movementTypes)
         => airports.Count * movementTypes.Count * SplitIntoHistoricalWindows(period).Count;
 
-    private static IReadOnlyList<(DateTime From, DateTime To)> SplitIntoHistoricalWindows(DateRange period)
+    private IReadOnlyList<(DateTime From, DateTime To)> SplitIntoHistoricalWindows(DateRange period)
     {
         var windows = new List<(DateTime From, DateTime To)>();
+        var end = string.IsNullOrWhiteSpace(_options.AsOfDate)
+            ? _runTime : period.To.ToDateTime(new TimeOnly(23, 59));
+        var start = string.IsNullOrWhiteSpace(_options.AsOfDate)
+            ? end.AddDays(-_options.LookbackDays) : period.From.ToDateTime(TimeOnly.MinValue);
 
         for (var date = period.From; date <= period.To; date = date.AddDays(1))
         {
             var day = date.ToDateTime(TimeOnly.MinValue);
-            windows.Add((day, day.AddHours(11).AddMinutes(59)));
-            windows.Add((day.AddHours(12), day.AddHours(23).AddMinutes(59)));
+            if (_options.PreferDailyHistoricalEndpoint)
+            {
+                windows.Add((day, day.AddHours(23).AddMinutes(59)));
+                continue;
+            }
+            foreach (var from in new[] { day, day.AddHours(12) })
+            {
+                var to = from.AddHours(12).AddMinutes(-1);
+                var clippedFrom = from < start ? start : from;
+                var clippedTo = to > end ? end : to;
+                if (clippedFrom <= clippedTo) windows.Add((clippedFrom, clippedTo));
+            }
         }
 
         return windows;

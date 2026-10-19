@@ -13,5 +13,6 @@ public interface IFlightLabsClient
 
     Task<IReadOnlyList<FlightDetailOccurrence>> GetFlightDetailsAsync(
         string flightNumber,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        DateOnly? date = null);
 }

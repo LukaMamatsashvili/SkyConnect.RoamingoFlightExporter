@@ -13,6 +13,7 @@ using SkyConnect.RoamingoFlightExporter.Services;
 var builder = Host.CreateApplicationBuilder(args);
 
 builder.Configuration
+    .SetBasePath(AppContext.BaseDirectory)
     .AddJsonFile("appsettings.json", optional: false, reloadOnChange: false)
     .AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: false)
     .AddEnvironmentVariables()
@@ -30,6 +31,8 @@ builder.Services
     .Bind(builder.Configuration.GetSection(ExporterOptions.SectionName))
     .ValidateDataAnnotations()
     .Validate(options => options.Airports.Count > 0, "At least one airport is required.")
+    .Validate(options => options.Airports.All(code => System.Text.RegularExpressions.Regex.IsMatch(code.Trim(), "^[A-Za-z]{3}$")), "Airports must contain three-letter IATA codes, for example KUT.")
+    .Validate(options => options.AirlineCodes.All(code => string.IsNullOrWhiteSpace(code) || System.Text.RegularExpressions.Regex.IsMatch(code.Trim(), "^[A-Za-z0-9]{2}$")), "AirlineCodes must contain two-character IATA codes, for example W6.")
     .Validate(options => options.LookbackDays > 0, "LookbackDays must be greater than zero.")
     .Validate(options => options.MaxConcurrency > 0, "MaxConcurrency must be greater than zero.")
     .ValidateOnStart();

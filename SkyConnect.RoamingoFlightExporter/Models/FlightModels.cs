@@ -18,7 +18,8 @@ public sealed record FlightDetailOccurrence(
     string? ScheduledDeparture,
     string? ActualDeparture,
     string? ScheduledArrival,
-    string? Status);
+    string? Status,
+    string? ActualArrival = null);
 
 public sealed record DisruptedFlightRow(
     DateOnly FlightDate,

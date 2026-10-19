@@ -14,7 +14,7 @@ public sealed class DateRangePlanner : IDateRangePlanner
     public DateRange GetLookbackWindow(DateOnly today, int lookbackDays)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(lookbackDays);
-        return new DateRange(today.AddDays(-lookbackDays + 1), today);
+        return new DateRange(today.AddDays(-lookbackDays), today);
     }
 
     public IReadOnlyList<DateRange> Split(DateRange range, int chunkDays)

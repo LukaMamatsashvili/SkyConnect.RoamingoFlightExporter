@@ -22,14 +22,29 @@ public sealed class ExcelExporter(IOptions<ExporterOptions> options) : IExcelExp
 
         Directory.CreateDirectory(outputDirectory);
 
-        var fileName = $"Roamingo_Flight_Disruptions_{DateTime.Today:yyyy-MM-dd}.xlsx";
+        var fileName = $"Roamingo_Flight_Disruptions_GE_{DateTime.Now:yyyy-MM-dd_HHmmss}.xlsx";
         var path = Path.Combine(outputDirectory, fileName);
 
         using var workbook = new XLWorkbook();
         AddFlightsSheet(workbook, result.Rows);
         AddSummarySheet(workbook, result.Summary);
+        var missing = result.Diagnostics.Count(row => row.InPeriod && row.ParserFinding.StartsWith("No matching detail row", StringComparison.Ordinal));
+        var summarySheet = workbook.Worksheet("Summary");
+        var warningRow = summarySheet.LastRowUsed()!.RowNumber() + 2;
+        summarySheet.Cell(warningRow, 1).Value = "დეტალების გარეშე დარჩენილი ფრენები";
+        summarySheet.Cell(warningRow, 2).Value = missing;
+        summarySheet.Cell(warningRow + 1, 1).Value = "ისტორიის დაფარვა";
+        summarySheet.Cell(warningRow + 1, 2).Value = missing > 0
+            ? "არასრული: დაუმუშავებელი ფრენები არ ნიშნავს შეფერხების არარსებობას"
+            : "ყველა ისტორიულ ფრენას მოეძებნა დეტალური ჩანაწერი";
         AddDiagnosticSummarySheet(workbook, result.Diagnostics, result.Summary);
         AddDiagnosticSheet(workbook, result.Diagnostics);
+        var allFlights = workbook.Worksheet("Diagnostic Audit").CopyTo("ყველა შერჩეული ფრენა");
+        var outOfPeriod = result.Diagnostics.Select((row, index) => (row, index))
+            .Where(item => !item.row.InPeriod).Select(item => item.index + 2).OrderDescending();
+        foreach (var row in outOfPeriod) allFlights.Row(row).Delete();
+        workbook.Worksheet("Diagnostic Audit").Visibility = XLWorksheetVisibility.Hidden;
+        GeorgianWorkbook.Apply(workbook);
         workbook.SaveAs(path);
 
         return path;
@@ -95,7 +110,7 @@ public sealed class ExcelExporter(IOptions<ExporterOptions> options) : IExcelExp
         sheet.Column(14).Width = 24;
     }
 
-    private static void AddSummarySheet(XLWorkbook workbook, ExportSummary summary)
+    private void AddSummarySheet(XLWorkbook workbook, ExportSummary summary)
     {
         var sheet = workbook.Worksheets.Add("Summary");
         var values = new (string Label, object Value)[]
@@ -104,6 +119,8 @@ public sealed class ExcelExporter(IOptions<ExporterOptions> options) : IExcelExp
             ("Period covered", $"{summary.PeriodStart:yyyy-MM-dd} to {summary.PeriodEnd:yyyy-MM-dd}"),
             ("Airports", string.Join(", ", summary.Airports)),
             ("Movement types", string.Join(", ", summary.MovementTypes)),
+            ("ავიაკომპანიის კოდები", _options.AirlineCodes.Count == 0 ? "ყველა" : string.Join(", ", _options.AirlineCodes)),
+            ("დაგვიანების მინიმალური ზღვარი (წუთი)", _options.MinimumArrivalDelayMinutes),
             ("Planned maximum API calls", summary.PlannedApiCalls),
             ("Total historical flights discovered", summary.TotalHistoricalFlightsDiscovered),
             ("Total unique flight numbers queried", summary.TotalUniqueFlightNumbersQueried),

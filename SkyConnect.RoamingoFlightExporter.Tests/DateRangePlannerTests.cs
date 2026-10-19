@@ -5,13 +5,13 @@ namespace SkyConnect.RoamingoFlightExporter.Tests;
 public sealed class DateRangePlannerTests
 {
     [Fact]
-    public void GetLookbackWindow_ReturnsInclusiveThirtyDayWindow()
+    public void GetLookbackWindow_StartsThirtyDaysBeforeToday()
     {
         var planner = new DateRangePlanner();
 
         var window = planner.GetLookbackWindow(new DateOnly(2026, 9, 21), 30);
 
-        Assert.Equal(new DateOnly(2026, 8, 23), window.From);
+        Assert.Equal(new DateOnly(2026, 8, 22), window.From);
         Assert.Equal(new DateOnly(2026, 9, 21), window.To);
     }
 

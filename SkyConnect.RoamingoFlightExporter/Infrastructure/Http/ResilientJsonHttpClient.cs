@@ -14,12 +14,15 @@ public sealed class ResilientJsonHttpClient(
     private readonly Queue<DateTimeOffset> _requestStartTimes = new();
     private readonly SemaphoreSlim _rateLimitLock = new(1, 1);
     private readonly ExporterOptions _options = options.Value;
+    private int _requestCount;
 
     public async Task<JsonDocument> GetAsync(string url, CancellationToken cancellationToken)
     {
         for (var attempt = 1; ; attempt++)
         {
             await WaitForRateLimitSlotAsync(cancellationToken);
+            if (Interlocked.Increment(ref _requestCount) > _options.MaxApiCallsPerRun)
+                throw new FlightLabsQuotaExceededException("Configured HTTP request budget reached (including retries).");
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeoutCts.CancelAfter(TimeSpan.FromSeconds(_options.RequestTimeoutSeconds));
@@ -162,7 +165,8 @@ public sealed class ResilientJsonHttpClient(
 
     private static bool IsNoData(HttpStatusCode statusCode, string body)
         => statusCode == HttpStatusCode.NotFound
-           && body.Contains("No data was found", StringComparison.OrdinalIgnoreCase);
+           && (body.Contains("No data was found", StringComparison.OrdinalIgnoreCase)
+               || body.Contains("No data found", StringComparison.OrdinalIgnoreCase));
 
     private static TimeSpan GetRetryDelay(HttpResponseMessage? response, int attempt)
     {

@@ -21,7 +21,16 @@ public sealed class FlightLabsClient(
         CancellationToken cancellationToken)
     {
         var url = BuildHistoricalUrl(airportCode, movementType, from, to);
-        using var document = await jsonHttpClient.GetAsync(url, cancellationToken);
+        JsonDocument document;
+        try
+        {
+            document = await jsonHttpClient.GetAsync(url, cancellationToken);
+        }
+        catch (FlightLabsNoDataException)
+        {
+            return [];
+        }
+        using var historicalDocument = document;
         var items = GetPayloadItems(document.RootElement);
 
         return items
@@ -34,12 +43,14 @@ public sealed class FlightLabsClient(
 
     public async Task<IReadOnlyList<FlightDetailOccurrence>> GetFlightDetailsAsync(
         string flightNumber,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        DateOnly? date = null)
     {
         var url = AddQueryString(_options.FlightLabs.FlightEndpoint, new Dictionary<string, string?>
         {
             ["access_key"] = credentials.ApiKey,
-            ["flight_number"] = flightNumber
+            ["flight_number"] = flightNumber,
+            ["date"] = date?.ToString("yyyy-MM-dd")
         });
 
         using var document = await jsonHttpClient.GetAsync(url, cancellationToken);
@@ -49,6 +60,7 @@ public sealed class FlightLabsClient(
             .Select(item => ParseFlightDetail(item, flightNumber))
             .Where(item => item is not null)
             .Select(item => item!)
+            .Where(item => date is null || item.FlightDate == date.Value)
             .ToList();
     }
 
@@ -63,6 +75,12 @@ public sealed class FlightLabsClient(
             ["date_to"] = to.ToString("yyyy-MM-ddTHH:mm")
         };
 
+        if (_options.PreferDailyHistoricalEndpoint)
+        {
+            query.Remove("date_from");
+            query.Remove("date_to");
+            query["date"] = from.ToString("yyyy-MM-dd");
+        }
         return AddQueryString(_options.FlightLabs.HistoricalEndpoint, query);
     }
 
@@ -85,6 +103,10 @@ public sealed class FlightLabsClient(
 
         foreach (var propertyName in new[] { "data", "flights", "results" })
         {
+            if (root.TryGetProperty(propertyName, out var single)
+                && single.ValueKind == JsonValueKind.Object
+                && (single.TryGetProperty("DATE", out _) || single.TryGetProperty("date", out _)))
+                return [single];
             if (root.TryGetProperty(propertyName, out var payload) && payload.ValueKind == JsonValueKind.Array)
             {
                 return payload.EnumerateArray().ToList();
@@ -142,7 +164,8 @@ public sealed class FlightLabsClient(
             FirstString(item, "STD", "std", "scheduled_departure"),
             FirstString(item, "ATD", "atd", "actual_departure"),
             FirstString(item, "STA", "sta", "scheduled_arrival"),
-            FirstString(item, "STATUS", "status"));
+            FirstString(item, "STATUS", "status"),
+            FirstString(item, "ATA", "ata", "actual_arrival"));
     }
 
     private static DateOnly? TryDateFromText(string? text)
